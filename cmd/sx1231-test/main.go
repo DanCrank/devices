@@ -9,10 +9,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/tve/devices/spimux"
-	rfm69 "github.com/tve/devices/sx1231"
-	"periph.io/x/periph/conn/gpio"
-	"periph.io/x/periph/conn/spi"
+	"github.com/DanCrank/devices/spimux"
+	rfm69 "github.com/DanCrank/devices/sx1231"
+	"periph.io/x/periph/conn/gpio/gpioreg"
+	"periph.io/x/periph/conn/spi/spireg"
 	"periph.io/x/periph/host"
 )
 
@@ -21,17 +21,17 @@ func run(intrPinName, csPinName string, csVal, power int, debug bool) error {
 		return err
 	}
 
-	intrPin := gpio.ByName(intrPinName)
+	intrPin := gpioreg.ByName(intrPinName)
 	if intrPin == nil {
 		return fmt.Errorf("cannot open pin %s", intrPinName)
 	}
 
-	selPin := gpio.ByName(csPinName)
+	selPin := gpioreg.ByName(csPinName)
 	if selPin == nil {
 		return fmt.Errorf("cannot open pin %s", csPinName)
 	}
 
-	spiBus, err := spi.New(-1, 0)
+	spiBus, err := spireg.Open("")
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func run(intrPinName, csPinName string, csVal, power int, debug bool) error {
 
 	log.Printf("Initializing sx1231...")
 	t0 := time.Now()
-	rfm69, err := rfm69.New(spi1231, intrPin, rfm69.RadioOpts{
+	rfm69, err := rfm69.New(spi1231.Port, intrPin, rfm69.RadioOpts{
 		Sync:   []byte{0x2D, 0x06},
 		Freq:   912500000,
 		Rate:   49230,

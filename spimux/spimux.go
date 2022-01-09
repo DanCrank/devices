@@ -8,6 +8,7 @@ import (
 
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
+	"periph.io/x/periph/conn/physic"
 	"periph.io/x/periph/conn/spi"
 )
 
@@ -29,8 +30,8 @@ import (
 // to use different settings.
 type Conn struct {
 	mu     *sync.Mutex // prevent concurrent access to shared SPI bus
-	conn   *spi.Conn   // the underlying SPI bus with shared chip select
-	port   spi.Port
+	Conn   *spi.Conn   // the underlying SPI bus with shared chip select
+	Port   spi.Port
 	selPin gpio.PinIO // pin to select between two devices
 	sel    gpio.Level // select value for this device
 }
@@ -44,19 +45,19 @@ func New(port spi.PortCloser, selPin gpio.PinIO) (*Conn, *Conn) {
 }
 
 // DevParams sets the device parameters and returns itself ('cause it's a Port as well as a Conn).
-func (c *Conn) DevParams(maxHz int64, mode spi.Mode, bits int) (spi.Conn, error) {
+func (c *Conn) DevParams(maxHz physic.Frequency, mode spi.Mode, bits int) (spi.Conn, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if *c.conn == nil {
-		conn, err := c.port.DevParams(maxHz, mode, bits)
+	if *c.Conn == nil {
+		conn, err := c.Port.Connect(maxHz, mode, bits)
 		if err != nil {
 			return nil, err
 		}
-		*c.conn = conn
+		*c.Conn = conn
 	}
 
-	return c, nil
+	return *c.Conn, nil
 }
 
 // Tx sets the select pin to the correct value and calls the underlying Tx.
@@ -65,7 +66,7 @@ func (c *Conn) Tx(w, r []byte) error {
 	defer c.mu.Unlock()
 
 	c.selPin.Out(c.sel)
-	return (*c.conn).Tx(w, r)
+	return (*c.Conn).Tx(w, r)
 }
 
 /* Write sets the select pin to the correct value and calls the underlying Write.
@@ -88,5 +89,5 @@ func (c *Conn) TxPackets(p []spi.Packet) error { return errors.New("TxPackets is
 // LimitSpeed is not implemented.
 func (c *Conn) LimitSpeed(maxHz int64) error { return errors.New("limitSpeed is not implemented") }
 
-var _ spi.Conn = &Conn{}
-var _ spi.PortCloser = &Conn{}
+//var _ spi.Conn = &Conn{}
+//var _ spi.PortCloser = &Conn{}
