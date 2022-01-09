@@ -39,6 +39,7 @@ package sx1231
 import (
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -382,6 +383,43 @@ func (r *Radio) SetPower(dbm byte) {
 	r.writeReg(REG_TESTPA2, 0x70)
 	r.log("SetPower %ddBm", dbm)
 	r.power = dbm
+
+	// Restore operating mode.
+	r.setMode(mode)
+}
+
+// SetEncryptionKey configures the radio to use encryption with the specified key
+func (r *Radio) SetEncryptionKey(key []byte) {
+	if len(key) != 16 {
+		log.Fatalf("invalid key length specified for SetEncryptionKey (expected 16 bytes, got %d)", len(key))
+	}
+
+	r.Lock()
+	defer r.Unlock()
+
+	// Save current mode.
+	mode := r.mode
+	r.setMode(MODE_STANDBY)
+
+	pktCfg2 := r.readReg(REG_PKTCONFIG2)
+	r.writeReg(REG_PKTCONFIG2, pktCfg2|0x01) // turn on AES encryption
+	r.writeReg(REG_AESKEYMSB, key...)
+
+	// Restore operating mode.
+	r.setMode(mode)
+}
+
+// SetEncryptionOff configures the radio to not use encryption
+func (r *Radio) SetEncryptionOff() {
+	r.Lock()
+	defer r.Unlock()
+
+	// Save current mode.
+	mode := r.mode
+	r.setMode(MODE_STANDBY)
+
+	pktCfg2 := r.readReg(REG_PKTCONFIG2)
+	r.writeReg(REG_PKTCONFIG2, pktCfg2&0xFE) // turn off AES encryption
 
 	// Restore operating mode.
 	r.setMode(mode)

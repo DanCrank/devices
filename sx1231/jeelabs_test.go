@@ -43,7 +43,7 @@ func Test_JLDecode(t *testing.T) {
 			t.Fatalf("Decoding %s dst mismatch, got %d expected %d", n, dst, tc.dst)
 		}
 		if ack != tc.ack {
-			t.Fatalf("Decoding %s ack mismatch, got %d expected %d", n, ack, tc.ack)
+			t.Fatalf("Decoding %s ack mismatch, got %t expected %t", n, ack, tc.ack)
 		}
 		if len(pl) != len(tc.payload) {
 			t.Fatalf("Decoding %s length mismatch got %+v expected %+v",
