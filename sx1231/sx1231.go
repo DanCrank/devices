@@ -45,6 +45,7 @@ import (
 
 	"periph.io/x/periph/conn/gpio"
 	"periph.io/x/periph/conn/gpio/gpioreg"
+	"periph.io/x/periph/conn/physic"
 	"periph.io/x/periph/conn/spi"
 )
 
@@ -166,7 +167,7 @@ func New(port spi.Port, intr gpio.PinIn, opts RadioOpts) (*Radio, error) {
 	}
 
 	// Set SPI parameters and get a connection.
-	conn, err := port.Connect(4*1000*1000, spi.Mode0, 8)
+	conn, err := port.Connect(4*physic.MegaHertz, spi.Mode0, 8)
 	if err != nil {
 		return nil, fmt.Errorf("sx1231: cannot set device params: %v", err)
 	}
