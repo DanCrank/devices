@@ -140,6 +140,9 @@ func (b busyError) Temporary() bool { return true }
 
 var debugPin gpio.PinOut
 
+const hwDelay time.Duration = 100 * time.Millisecond //generic delay to allow hardware to cope with non-root access
+//see: https://forum.up-community.org/discussion/2141/solved-tutorial-gpio-i2c-spi-access-without-root-permissions
+
 // New initializes an sx1231 Radio given an spi.Conn and an interrupt pin, and places the radio
 // in receive mode.
 //
@@ -167,10 +170,11 @@ func New(port spi.Port, intr gpio.PinIn, opts RadioOpts) (*Radio, error) {
 	}
 
 	// Set SPI parameters and get a connection.
-	conn, err := port.Connect(4*physic.MegaHertz, spi.Mode0, 8)
+	conn, err := port.Connect(2*physic.MegaHertz, spi.Mode0, 8)
 	if err != nil {
 		return nil, fmt.Errorf("sx1231: cannot set device params: %v", err)
 	}
+	time.Sleep(hwDelay)
 	r.spi = conn
 
 	// Try to synchronize communication with the sx1231.
@@ -187,6 +191,7 @@ func New(port spi.Port, intr gpio.PinIn, opts RadioOpts) (*Radio, error) {
 			if v == pattern {
 				return nil
 			}
+			time.Sleep(hwDelay)
 		}
 		return fmt.Errorf("sx1231: cannot sync with chip, sent %#x got %#x", pattern, v)
 	}
