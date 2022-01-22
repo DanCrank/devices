@@ -11,9 +11,9 @@ import (
 
 	"github.com/DanCrank/devices/spimux"
 	rfm69 "github.com/DanCrank/devices/sx1231"
-	"periph.io/x/periph/conn/gpio/gpioreg"
-	"periph.io/x/periph/conn/spi/spireg"
-	"periph.io/x/periph/host"
+	"periph.io/x/conn/v3/gpio/gpioreg"
+	"periph.io/x/conn/v3/spi/spireg"
+	"periph.io/x/host/v3"
 )
 
 func run(intrPinName, csPinName string, csVal, power int, debug bool) error {

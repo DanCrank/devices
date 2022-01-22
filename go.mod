@@ -2,4 +2,6 @@ module github.com/DanCrank/devices
 
 go 1.17
 
-require periph.io/x/periph v3.6.8+incompatible
+require periph.io/x/conn/v3 v3.6.10
+
+require periph.io/x/host/v3 v3.7.2
