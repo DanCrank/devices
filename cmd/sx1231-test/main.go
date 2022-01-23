@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/DanCrank/devices/spimux"
 	rfm69 "github.com/DanCrank/devices/sx1231"
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/conn/v3/spi/spireg"
@@ -31,19 +30,14 @@ func run(intrPinName, csPinName string, csVal, power int, debug bool) error {
 		return fmt.Errorf("cannot open pin %s", csPinName)
 	}
 
-	spiBus, err := spireg.Open("")
+	spiPort, err := spireg.Open("")
 	if err != nil {
 		return err
 	}
 
-	spi1231, b := spimux.New(spiBus, selPin)
-	if csVal != 0 {
-		spi1231 = b
-	}
-
 	log.Printf("Initializing sx1231...")
 	t0 := time.Now()
-	rfm69, err := rfm69.New(spi1231.Port, intrPin, rfm69.RadioOpts{
+	rfm69, err := rfm69.New(spiPort, intrPin, rfm69.RadioOpts{
 		Sync:   []byte{0x2D, 0x06},
 		Freq:   912500000,
 		Rate:   49230,

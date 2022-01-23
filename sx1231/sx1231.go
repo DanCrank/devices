@@ -194,9 +194,10 @@ func New(port spi.Port, intr gpio.PinIn, opts RadioOpts) (*Radio, error) {
 			}
 			time.Sleep(hwDelay)
 		}
-		return fmt.Errorf("sx1231: cannot sync with chip, sent %#x got %#x", pattern, v)
+		return fmt.Errorf("sx1231: foobar: cannot sync with chip, sent %#x got %#x", pattern, v)
 	}
 	if err := sync(0xaa); err != nil {
+		r.log("SX1231/SX1231 version %#x", r.readReg(REG_VERSION))
 		return nil, err
 	}
 	if err := sync(0x55); err != nil {
