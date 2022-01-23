@@ -44,7 +44,6 @@ import (
 	"time"
 
 	"periph.io/x/conn/v3/gpio"
-	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/conn/v3/physic"
 	"periph.io/x/conn/v3/spi"
 )
@@ -138,9 +137,7 @@ type busyError struct{ e string }
 func (b busyError) Error() string   { return b.e }
 func (b busyError) Temporary() bool { return true }
 
-var debugPin gpio.PinOut
-
-const hwDelay time.Duration = 100 * time.Millisecond //generic delay to allow hardware to cope with non-root access
+//const hwDelay time.Duration = 100 * time.Millisecond //generic delay to allow hardware to cope with non-root access
 //see: https://forum.up-community.org/discussion/2141/solved-tutorial-gpio-i2c-spi-access-without-root-permissions
 
 // New initializes an sx1231 Radio given an spi.Conn and an interrupt pin, and places the radio
@@ -156,7 +153,7 @@ const hwDelay time.Duration = 100 * time.Millisecond //generic delay to allow ha
 // Received packets will be sent on the returned rxChan, which has a small amount of
 // buffering. The rxChan will be closed if a persistent error occurs when
 // communicating with the device, use the Error() function to retrieve the error.
-func New(port spi.Port, intr gpio.PinIn, opts RadioOpts) (*Radio, error) {
+func New(port spi.Port, cs gpio.PinOut, reset gpio.PinOut, intr gpio.PinIn, opts RadioOpts) (*Radio, error) {
 	r := &Radio{
 		intrPin: intr,
 		mode:    255,
@@ -174,35 +171,14 @@ func New(port spi.Port, intr gpio.PinIn, opts RadioOpts) (*Radio, error) {
 	if err != nil {
 		return nil, fmt.Errorf("sx1231: cannot set device params: %v", err)
 	}
-	time.Sleep(hwDelay)
 	r.spi = conn
 
-	// Try to synchronize communication with the sx1231.
-	sync := func(pattern byte) error {
-		var v byte
-		for n := 10; n > 0; n-- {
-			// Doing write transactions explicitly to get OS errors.
-			r.writeReg(REG_SYNCVALUE1, pattern)
-			// if err := conn.Tx([]byte{REG_SYNCVALUE1 | 0x80, pattern}, []byte{0, 0}); err != nil {
-			// 	return fmt.Errorf("sx1231: %s", err)
-			// }
-			time.Sleep(hwDelay)
-			// Read same thing back, we hope...
-			v = r.readReg(REG_SYNCVALUE1)
-			if v == pattern {
-				return nil
-			}
-			time.Sleep(hwDelay)
-		}
-		return fmt.Errorf("sx1231: foobar: cannot sync with chip, sent %#x got %#x", pattern, v)
-	}
-	if err := sync(0xaa); err != nil {
-		r.log("SX1231/SX1231 version %#x", r.readReg(REG_VERSION))
-		return nil, err
-	}
-	if err := sync(0x55); err != nil {
-		return nil, err
-	}
+	// this reset sequence may be peculiar to the Adafruit RFM69 bonnet
+	// this mimics the same thing their CircuitPython code does
+	reset.Out(gpio.High)
+	time.Sleep(100 * time.Millisecond)
+	reset.Out(gpio.Low)
+	time.Sleep(1 * time.Second)
 
 	r.setMode(MODE_SLEEP)
 	r.setMode(MODE_STANDBY)
@@ -216,12 +192,12 @@ func New(port spi.Port, intr gpio.PinIn, opts RadioOpts) (*Radio, error) {
 	}
 	r.setMode(MODE_STANDBY)
 	// Debug: read config regs back and make sure they are correct.
-	//for i := 0; i < len(configRegs)-1; i += 2 {
-	//	if r.readReg(configRegs[i]) != configRegs[i+1] {
-	//		r.log("error writing config reg %#x: got %#x expected %#x",
-	//			configRegs[i], r.readReg(configRegs[i]), configRegs[i+1])
-	//	}
-	//}
+	for i := 0; i < len(configRegs)-1; i += 2 {
+		if r.readReg(configRegs[i]) != configRegs[i+1] {
+			r.log("error writing config reg %#x: got %#x expected %#x",
+				configRegs[i], r.readReg(configRegs[i]), configRegs[i+1])
+		}
+	}
 
 	// Configure the bit rate and frequency.
 	r.SetRate(opts.Rate)
@@ -240,12 +216,6 @@ func New(port spi.Port, intr gpio.PinIn, opts RadioOpts) (*Radio, error) {
 	wBuf[1] = byte(0x80 + ((len(r.sync) - 1) << 3))
 	copy(wBuf[2:], r.sync)
 	r.spi.Tx(wBuf, rBuf)
-
-	debugPin = gpioreg.ByName("CSID1")
-	if debugPin == nil {
-		r.log("Cannot find debug pin")
-	}
-	debugPin.Out(gpio.High)
 
 	count := 0
 repeat:
@@ -618,7 +588,6 @@ func (r *Radio) Transmit(payload []byte) error {
 	buf[0] = byte(len(payload))
 	copy(buf[1:], payload)
 	r.writeReg(REG_FIFO|0x80, buf...)
-	debugPin.Out(gpio.High)
 	r.setMode(MODE_TRANSMIT)
 	return nil
 }
@@ -706,7 +675,6 @@ func (r *Radio) rx() (*RxPacket, error) {
 	}
 
 	// Got packet, read it.
-	debugPin.Out(gpio.Low)
 	buf := readFifo()
 
 	// Construct RxPacket and return it.

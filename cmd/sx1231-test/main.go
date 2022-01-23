@@ -10,12 +10,13 @@ import (
 	"time"
 
 	rfm69 "github.com/DanCrank/devices/sx1231"
+
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/conn/v3/spi/spireg"
 	"periph.io/x/host/v3"
 )
 
-func run(intrPinName, csPinName string, csVal, power int, debug bool) error {
+func run(spiPortName, intrPinName, resetPinName, csPinName string, power int, debug bool) error {
 	if _, err := host.Init(); err != nil {
 		return err
 	}
@@ -25,19 +26,24 @@ func run(intrPinName, csPinName string, csVal, power int, debug bool) error {
 		return fmt.Errorf("cannot open pin %s", intrPinName)
 	}
 
-	selPin := gpioreg.ByName(csPinName)
-	if selPin == nil {
+	csPin := gpioreg.ByName(csPinName)
+	if csPin == nil {
 		return fmt.Errorf("cannot open pin %s", csPinName)
 	}
 
-	spiPort, err := spireg.Open("")
+	resetPin := gpioreg.ByName(resetPinName)
+	if resetPin == nil {
+		return fmt.Errorf("cannot open pin %s", resetPinName)
+	}
+
+	spiPort, err := spireg.Open(spiPortName)
 	if err != nil {
 		return err
 	}
 
 	log.Printf("Initializing sx1231...")
 	t0 := time.Now()
-	rfm69, err := rfm69.New(spiPort, intrPin, rfm69.RadioOpts{
+	rfm69, err := rfm69.New(spiPort, csPin, resetPin, intrPin, rfm69.RadioOpts{
 		Sync:   []byte{0x2D, 0x06},
 		Freq:   912500000,
 		Rate:   49230,
@@ -92,9 +98,10 @@ func run(intrPinName, csPinName string, csVal, power int, debug bool) error {
 }
 
 func main() {
-	intrPin := flag.String("intr", "XIO-P0", "sx1231 radio interrupt pin name")
-	csPin := flag.String("cspin", "CSID0", "sx1231 radio chip select pin name")
-	csVal := flag.Int("csval", 0, "sx1231 radio chip select value (0 or 1)")
+	spiPort := flag.String("port", "/dev/spidev0.1", "sx1231 SPI port name")
+	intrPin := flag.String("intr", "GPIO22", "sx1231 radio interrupt pin name")
+	resetPin := flag.String("reset", "GPIO25", "sx1231 radio reset pin name")
+	csPin := flag.String("cspin", "GPIO7", "sx1231 radio chip select pin name")
 	power := flag.Int("power", 15, "sx1231 radio output power in dBm (2..17)")
 	debug := flag.Bool("debug", false, "enable debug output")
 	flag.Usage = func() {
@@ -104,7 +111,7 @@ func main() {
 	}
 	flag.Parse()
 
-	if err := run(*intrPin, *csPin, *csVal, *power, *debug); err != nil {
+	if err := run(*spiPort, *intrPin, *resetPin, *csPin, *power, *debug); err != nil {
 		fmt.Fprintf(os.Stderr, "Exiting due to error: %s\n", err)
 		os.Exit(2)
 	}
