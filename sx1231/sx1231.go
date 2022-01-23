@@ -183,9 +183,10 @@ func New(port spi.Port, intr gpio.PinIn, opts RadioOpts) (*Radio, error) {
 		for n := 10; n > 0; n-- {
 			// Doing write transactions explicitly to get OS errors.
 			r.writeReg(REG_SYNCVALUE1, pattern)
-			if err := conn.Tx([]byte{REG_SYNCVALUE1 | 0x80, pattern}, []byte{0, 0}); err != nil {
-				return fmt.Errorf("sx1231: %s", err)
-			}
+			// if err := conn.Tx([]byte{REG_SYNCVALUE1 | 0x80, pattern}, []byte{0, 0}); err != nil {
+			// 	return fmt.Errorf("sx1231: %s", err)
+			// }
+			time.Sleep(hwDelay)
 			// Read same thing back, we hope...
 			v = r.readReg(REG_SYNCVALUE1)
 			if v == pattern {
