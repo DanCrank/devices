@@ -1,20 +1,20 @@
 .DEFAULT_GOAL := build
 
 fmt:
-	go fmt sx1231/registers.go sx1231/sx1231.go
-	go fmt cmd/sx1231-test/main.go
+	go fmt registers.go sx1231.go
+	go fmt cmd/main.go
 .PHONY:fmt
 
 lint: fmt
-	golint sx1231/registers.go sx1231/sx1231.go
-	golint cmd/sx1231-test/main.go
+	golint registers.go sx1231.go
+	golint cmd/main.go
 .PHONY:lint
 
 vet: fmt
-	go vet sx1231/registers.go sx1231/sx1231.go
-	go vet cmd/sx1231-test/main.go
+	go vet registers.go sx1231.go
+	go vet cmd/main.go
 .PHONY:vet
 
 build: vet
-	go build -o test cmd/sx1231-test/main.go
+	go build -o test cmd/main.go
 .PHONY:build

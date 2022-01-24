@@ -1,4 +1,4 @@
-module github.com/DanCrank/devices
+module github.com/DanCrank/rfm69-sx1231-rpi
 
 go 1.17
 
