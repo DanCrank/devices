@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	rfm69 "github.com/DanCrank/rfm69-sx1231-rpi/sx1231"
+	rfm69 "github.com/DanCrank/rfm69-sx1231-rpi"
 
 	"periph.io/x/conn/v3/gpio/gpioreg"
 	"periph.io/x/conn/v3/spi/spireg"
