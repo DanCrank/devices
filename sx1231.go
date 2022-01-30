@@ -412,9 +412,24 @@ type LogPrintf func(format string, v ...interface{})
 // then waits for the new mode to be reached.
 func (r *Radio) setMode(mode byte) {
 	mode = mode & 0x1c
+	switch mode {
+	case MODE_TRANSMIT:
+		r.log("setMode: MODE_TRANSMIT")
+	case MODE_RECEIVE:
+		r.log("setMode: MODE_RECEIVE")
+	case MODE_STANDBY:
+		r.log("setMode: MODE_STANDBY")
+	case MODE_SLEEP:
+		r.log("setMode: MODE_SLEEP")
+	case MODE_FS:
+		r.log("setMode: MODE_FS")
+	default:
+		r.log("setMode: MODE_??? %d", mode)
+	}
 
 	// If we're in the right mode then don't do anything.
 	if r.mode == mode {
+		r.log("setMode: no-op")
 		return
 	}
 
@@ -477,7 +492,66 @@ func (r *Radio) busy() bool {
 	}
 }
 
+// trying a simplified receive function based on what the Rust driver does.
+// if this works I will replace Receive() with this.
+func (r *Radio) SimpleReceive(timeout time.Duration) (*RxPacket, error) {
+	// set receive mode
+	r.setMode(MODE_RECEIVE)
+	// wait for a packet ready, up to the timeout
+	payloadReady := false
+	end := time.Now().Add(timeout)
+	for !time.Now().After(end) {
+		payloadReady = r.readReg(REG_IRQFLAGS2)&IRQ2_PAYLOADREADY != 0
+		if payloadReady {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	// if timeout, return nil
+	if !payloadReady {
+		return nil, nil
+	}
+	// set standby mode
+	r.setMode(MODE_STANDBY)
+	// read packet from fifo
+	var rssi, fei int
+	// Bail out if we're not actually receiving a packet. This happens when the
+	// receiver restarts because RSSI went away or no SYNC was found before timeout.
+	irq1 := r.readReg(REG_IRQFLAGS1)
+	if irq1&(IRQ1_RXREADY|IRQ1_RSSI) != IRQ1_RXREADY|IRQ1_RSSI {
+		//r.log("... not receiving? IRQ=%t mode=%#02x irq1=%#02x irq2=%02x",
+		//	r.intrPin.Read(), r.readReg(REG_OPMODE), irq1, irq2)
+		return nil, nil
+	}
+	// As soon as we have sync match, grab RSSI and FEI.
+	if rssi == 0 && irq1&IRQ1_SYNCMATCH != 0 {
+		// Get RSSI.
+		rssi = 0 - int(r.readReg(REG_RSSIVALUE))/2
+		// Get freq error detected, caution: signed 16-bit value.
+		f := int(int16(r.readReg16(REG_AFCMSB)))
+		fei = (f * (32000000 >> 13)) >> 6
+	}
+	var wBuf, rBuf [67]byte
+	wBuf[0] = REG_FIFO
+	r.spi.Tx(wBuf[:], rBuf[:])
+	buf := rBuf[1:] // ?
+	// build and return packet
+	l := buf[0]
+	if l > 65 {
+		r.log("Rx packet too long (%d)", l)
+		return nil, fmt.Errorf("received packet too long (%d)", l)
+	}
+	var snr int
+	if rssi != 0 {
+		floor := -int(r.readReg(REG_RSSITHRES)) / 2
+		snr = rssi - floor
+		r.log("RX Rssi=%d Floor=%d SNR=%d", rssi, floor, snr)
+	}
+	return &RxPacket{Payload: buf[1 : 1+l], Rssi: rssi, Snr: snr, Fei: fei}, nil
+}
+
 func (r *Radio) Receive() (*RxPacket, error) {
+	// TODO: timeout
 	// If we haven't yet, start the timer for RSSI threshold adjustments.
 	if r.rssiAdj.IsZero() {
 		r.rxTimeout = 0
