@@ -495,7 +495,8 @@ func (r *Radio) busy() bool {
 // trying a simplified receive function based on what the Rust driver does.
 // if this works I will replace Receive() with this.
 func (r *Radio) SimpleReceive(timeout time.Duration) (*RxPacket, error) {
-	// set receive mode
+	r.log("In SimpleReceive")
+	r.logRegs()
 	r.setMode(MODE_RECEIVE)
 	// wait for a packet ready, up to the timeout
 	payloadReady := false
@@ -509,8 +510,12 @@ func (r *Radio) SimpleReceive(timeout time.Duration) (*RxPacket, error) {
 	}
 	// if timeout, return nil
 	if !payloadReady {
+		r.log("SimpleReceive: timeout, returning nil")
+		r.logRegs()
 		return nil, nil
 	}
+	r.log("SimpleReceive: radio reports payload ready")
+	r.logRegs()
 	// set standby mode
 	r.setMode(MODE_STANDBY)
 	// read packet from fifo
@@ -521,6 +526,7 @@ func (r *Radio) SimpleReceive(timeout time.Duration) (*RxPacket, error) {
 	if irq1&(IRQ1_RXREADY|IRQ1_RSSI) != IRQ1_RXREADY|IRQ1_RSSI {
 		//r.log("... not receiving? IRQ=%t mode=%#02x irq1=%#02x irq2=%02x",
 		//	r.intrPin.Read(), r.readReg(REG_OPMODE), irq1, irq2)
+		r.log("SimpleReceive: unexpectedly reported no rxready or no rssi, returning nil")
 		return nil, nil
 	}
 	// As soon as we have sync match, grab RSSI and FEI.
@@ -533,6 +539,7 @@ func (r *Radio) SimpleReceive(timeout time.Duration) (*RxPacket, error) {
 	}
 	var wBuf, rBuf [67]byte
 	wBuf[0] = REG_FIFO
+	r.log("SimpleReceive: reading fifo")
 	r.spi.Tx(wBuf[:], rBuf[:])
 	buf := rBuf[1:] // ?
 	// build and return packet
@@ -547,6 +554,7 @@ func (r *Radio) SimpleReceive(timeout time.Duration) (*RxPacket, error) {
 		snr = rssi - floor
 		r.log("RX Rssi=%d Floor=%d SNR=%d", rssi, floor, snr)
 	}
+	r.log("SimpleReceive: returning packet")
 	return &RxPacket{Payload: buf[1 : 1+l], Rssi: rssi, Snr: snr, Fei: fei}, nil
 }
 
