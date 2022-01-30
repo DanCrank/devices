@@ -523,12 +523,12 @@ func (r *Radio) SimpleReceive(timeout time.Duration) (*RxPacket, error) {
 	// Bail out if we're not actually receiving a packet. This happens when the
 	// receiver restarts because RSSI went away or no SYNC was found before timeout.
 	irq1 := r.readReg(REG_IRQFLAGS1)
-	if irq1&(IRQ1_RXREADY|IRQ1_RSSI) != IRQ1_RXREADY|IRQ1_RSSI {
-		//r.log("... not receiving? IRQ=%t mode=%#02x irq1=%#02x irq2=%02x",
-		//	r.intrPin.Read(), r.readReg(REG_OPMODE), irq1, irq2)
-		r.log("SimpleReceive: unexpectedly reported no rxready or no rssi, returning nil")
-		return nil, nil
-	}
+	//if irq1&(IRQ1_RXREADY|IRQ1_RSSI) != IRQ1_RXREADY|IRQ1_RSSI {
+	//	//r.log("... not receiving? IRQ=%t mode=%#02x irq1=%#02x irq2=%02x",
+	//	//	r.intrPin.Read(), r.readReg(REG_OPMODE), irq1, irq2)
+	//	r.log("SimpleReceive: unexpectedly reported no rxready or no rssi, returning nil")
+	//	return nil, nil
+	//}
 	// As soon as we have sync match, grab RSSI and FEI.
 	if rssi == 0 && irq1&IRQ1_SYNCMATCH != 0 {
 		// Get RSSI.
