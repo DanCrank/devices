@@ -67,9 +67,12 @@ const (
 	DIO_PKTSENT  = 0x00
 )
 
+//TODO: get rid of this!
 // register values to initialize the chip, this array has pairs of <address, data>
 var configRegs = []byte{
 	0x01, 0x00, // OpMode = sleep
+	0x05, 0x01, // FdevMsb
+	0x06, 0x38, // FdevLsb
 	0x11, 0x9F, // power output
 	0x12, 0x09, // Pa ramp in 40us
 	0x1E, 0x0C, // AfcAutoclearOn, AfcAutoOn
@@ -78,9 +81,9 @@ var configRegs = []byte{
 	0x29, 0xA8, // RssiThresh (A0=-80dB, B4=-90dB, B8=-92dB)
 	0x2A, 0x00, // disable RxStart timeout
 	0x2B, 0x40, // RssiTimeout after 2*64=128 bytes
-	0x2D, 0x05, // PreambleSize = 5
-	0x37, 0xD8, // PacketConfig1 = variable, white, no filtering, ign crc, no addr filter
-	0x38, 0x42, // PayloadLength = max 66
+	0x2D, 0x04, // PreambleSize = 4
+	0x37, 0xD0, // PacketConfig1 = variable, white, no filtering, crc autoclear, no addr filter
+	0x38, 0x40, // PayloadLength = max 64
 	0x3C, 0x8F, // FifoTresh, not empty, level 15
 	0x3D, 0x12, // PacketConfig2, interpkt = 1, autorxrestart on
 	0x6F, 0x30, // RegTestDagc 20->improve AFC w/low-beta, 30->w/out low-beta offset
@@ -89,8 +92,6 @@ var configRegs = []byte{
 	//0x02, 0x00, // DataModul = packet mode, fsk
 	//0x03, 0x02, // BitRateMsb, data rate = 49,261 khz
 	//0x04, 0x8A, // BitRateLsb, divider = 32 MHz / 650
-	//0x05, 0x02, // FdevMsb = 45 KHz
-	//0x06, 0xE1, // FdevLsb = 45 KHz
 	//0x19, 0x4A, // RxBw 100 KHz
 	//0x1A, 0x42, // AfcBw 125 KHz
 	//0x2E, 0x88, // SyncConfig = sync on, sync size = 2

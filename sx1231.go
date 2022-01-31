@@ -103,21 +103,6 @@ type Rate struct {
 	AfcBw   byte // value for afcBw register (0x1A)
 }
 
-// Rates is the table of supported bit rates and their corresponding register settings. The map
-// key is the bit rate in bits per second. In order to operate at a new bit rate the table can be
-// extended by the client.
-var Rates = map[uint32]Rate{
-	49230: {45000, 0, 0x4A, 0x42},  // JeeLabs driver for rfm69 (RxBw=100, AfcBw=125)
-	49231: {180000, 0, 0x49, 0x49}, // JeeLabs driver with rf12b compatibility
-	49232: {45000, 0, 0x52, 0x4A},  // JeeLabs driver for rfm69 (RxBw=83, AfcBw=100)
-	49233: {51660, 0, 0x52, 0x4A},  // JeeLabs driver for rfm69 (RxBw=83, AfcBw=100)
-	50000: {90000, 0, 0x42, 0x42},  // nice round number
-}
-
-// TODO: check whether the following is a better setting for 50kbps:
-// freescale app note http://cache.nxp.com/files/rf_if/doc/app_note/AN4983.pdf?fpsp=1&WT_TYPE=Application%20Notes&WT_VENDOR=FREESCALE&WT_FILE_FORMAT=pdf&WT_ASSET=Documentation&fileExt=.pdf
-// uses: 50kbps, 25khz Fdev, 1.0 gaussian filter, 156.24khz RxBW&AfcBW, 3416Hz LO offset, 497Hz DCC
-
 // RxPacket is a received packet with stats.
 type RxPacket struct {
 	Payload []byte    // payload, from address to last data byte, excluding length & crc
@@ -202,7 +187,7 @@ func New(port spi.Port, cs gpio.PinOut, reset gpio.PinOut, intr gpio.PinIn, opts
 	// Configure the bit rate and frequency.
 	r.SetRate(opts.Rate)
 	r.SetFrequency(opts.Freq)
-	r.SetPower(13)
+	r.SetPower(17)
 
 	// Configure the sync bytes.
 	if len(opts.Sync) < 1 || len(opts.Sync) > 8 {
@@ -217,36 +202,36 @@ func New(port spi.Port, cs gpio.PinOut, reset gpio.PinOut, intr gpio.PinIn, opts
 	copy(wBuf[2:], r.sync)
 	r.spi.Tx(wBuf, rBuf)
 
-	count := 0
-repeat:
-	// Initialize interrupt pin.
-	if err := r.intrPin.In(gpio.Float, gpio.RisingEdge); err != nil {
-		return nil, fmt.Errorf("sx1231: error initializing interrupt pin: %s", err)
-	}
-	r.log("Interrupt pin is %v", r.intrPin.Read())
+	//	count := 0
+	// repeat:
+	// 	// Initialize interrupt pin.
+	// 	if err := r.intrPin.In(gpio.Float, gpio.RisingEdge); err != nil {
+	// 		return nil, fmt.Errorf("sx1231: error initializing interrupt pin: %s", err)
+	// 	}
+	// 	r.log("Interrupt pin is %v", r.intrPin.Read())
 
-	// Test the interrupt function by configuring the radio such that it generates an interrupt
-	// and then call WaitForEdge. Start by verifying that we don't have any pending interrupt.
-	for r.intrPin.WaitForEdge(0) {
-		r.log("Interrupt test shows an incorrect pending interrupt")
-	}
-	// Make the radio produce an interrupt.
-	r.setMode(MODE_FS)
-	r.writeReg(REG_DIOMAPPING1, DIO_MAPPING+0xC0)
-	if !r.intrPin.WaitForEdge(100 * time.Millisecond) {
-		if count == 0 {
-			r.writeReg(REG_DIOMAPPING1, DIO_MAPPING)
-			//r.intrPin.Close()
-			time.Sleep(100 * time.Millisecond)
-			count++
-			goto repeat
-		}
-		return nil, fmt.Errorf("sx1231: interrupts from radio do not work, try unexporting gpio%d", r.intrPin.Number())
-	}
-	r.writeReg(REG_DIOMAPPING1, DIO_MAPPING)
-	// Flush any addt'l interrupts.
-	for r.intrPin.WaitForEdge(0) {
-	}
+	// 	// Test the interrupt function by configuring the radio such that it generates an interrupt
+	// 	// and then call WaitForEdge. Start by verifying that we don't have any pending interrupt.
+	// 	for r.intrPin.WaitForEdge(0) {
+	// 		r.log("Interrupt test shows an incorrect pending interrupt")
+	// 	}
+	// 	// Make the radio produce an interrupt.
+	// 	r.setMode(MODE_FS)
+	// 	r.writeReg(REG_DIOMAPPING1, DIO_MAPPING+0xC0)
+	// 	if !r.intrPin.WaitForEdge(100 * time.Millisecond) {
+	// 		if count == 0 {
+	// 			r.writeReg(REG_DIOMAPPING1, DIO_MAPPING)
+	// 			//r.intrPin.Close()
+	// 			time.Sleep(100 * time.Millisecond)
+	// 			count++
+	// 			goto repeat
+	// 		}
+	// 		return nil, fmt.Errorf("sx1231: interrupts from radio do not work, try unexporting gpio%d", r.intrPin.Number())
+	// 	}
+	// 	r.writeReg(REG_DIOMAPPING1, DIO_MAPPING)
+	// 	// Flush any addt'l interrupts.
+	// 	for r.intrPin.WaitForEdge(0) {
+	// 	}
 
 	// log register contents
 	r.logRegs()
@@ -285,44 +270,11 @@ func (r *Radio) SetFrequency(freq uint32) {
 	r.setMode(mode)
 }
 
-// SetRate sets the bit rate according to the Rates table. The rate requested must use one of
-// the values from the Rates table. If it is not, nothing is changed.
+// set the bit rate directly (if this works, will replace the function below
+// and its associated lookup table)
 func (r *Radio) SetRate(rate uint32) {
-	params, found := Rates[rate]
-	if !found {
-		return
-	}
-	bw := func(v byte) int {
-		return 32000000 / (int(16+(v&0x18>>1)) * (1 << ((v & 0x7) + 2)))
-	}
-	r.log("SetRate %dbps, Fdev:%dHz, RxBw:%dHz(%#x), AfcBw:%dHz(%#x) AFC off:%dHz", rate,
-		params.Fdev, bw(params.RxBw), params.RxBw, bw(params.AfcBw), params.AfcBw,
-		(params.Fdev/10/488)*488)
-
-	r.Lock()
-	defer r.Unlock()
-
-	r.rate = rate
-	mode := r.mode
-	r.setMode(MODE_STANDBY)
-	// program bit rate, assume a 32Mhz osc
-	var rateVal uint32 = (32000000 + rate/2) / rate
+	rateVal := 32000000 / rate
 	r.writeReg(REG_BITRATEMSB, byte(rateVal>>8), byte(rateVal&0xff))
-	// program frequency deviation
-	var fStep float64 = 32000000.0 / 524288 // 32Mhz osc / 2^19 = 61.03515625 Hz
-	fdevVal := uint32((float64(params.Fdev) + fStep/2) / fStep)
-	r.writeReg(REG_FDEVMSB, byte(fdevVal>>8), byte(fdevVal&0xFF))
-	// program data modulation register
-	r.writeReg(REG_DATAMODUL, params.Shaping&0x3)
-	// program RX bandwidth and AFC bandwidth
-	r.writeReg(REG_RXBW, params.RxBw, params.AfcBw)
-	// program AFC offset to be 10% of Fdev
-	r.writeReg(REG_TESTAFC, byte(params.Fdev/10/488))
-	if r.readReg(REG_AFCCTRL) != 0x00 {
-		r.setMode(MODE_FS)            // required to write REG_AFCCTRL, undocumented
-		r.writeReg(REG_AFCCTRL, 0x00) // 0->AFC, 20->AFC w/low-beta offset
-	}
-	r.setMode(mode)
 }
 
 // SetPower configures the radio for the specified output power (TODO: should be in dBm).
