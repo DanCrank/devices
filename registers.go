@@ -67,12 +67,16 @@ const (
 	DIO_PKTSENT  = 0x00
 )
 
-//TODO: get rid of this!
+// Now adopting a short-term and long-term strategy for this.
+// Short-term - using values from the lookup table in the (excellent) RadioHead library used by the other end of the link
+// and setting them directly in this register map so the ground station matches the desired modem mode (rf69.FSK_Rb9_6Fd19_2)
+// TODO Long-term - implement an actual lookup table like the one RadioHead has, so we can easily set any modem mode.
+
 // register values to initialize the chip, this array has pairs of <address, data>
 var configRegs = []byte{
 	0x01, 0x00, // OpMode = sleep
 	0x05, 0x01, // FdevMsb
-	0x06, 0x38, // FdevLsb
+	0x06, 0x3B, // FdevLsb
 	0x11, 0x9F, // power output
 	0x12, 0x09, // Pa ramp in 40us
 	0x1E, 0x0C, // AfcAutoclearOn, AfcAutoOn

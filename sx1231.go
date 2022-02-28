@@ -103,6 +103,18 @@ type Rate struct {
 	AfcBw   byte // value for afcBw register (0x1A)
 }
 
+// Rates is the table of supported bit rates and their corresponding register settings. The map
+// key is the bit rate in bits per second. In order to operate at a new bit rate the table can be
+// extended by the client.
+var Rates = map[uint32]Rate{
+	9600:  {19013, 0, 0xF4, 0xF4},  // DanCrank setting for rover project
+	49230: {45000, 0, 0x4A, 0x42},  // JeeLabs driver for rfm69 (RxBw=100, AfcBw=125)
+	49231: {180000, 0, 0x49, 0x49}, // JeeLabs driver with rf12b compatibility
+	49232: {45000, 0, 0x52, 0x4A},  // JeeLabs driver for rfm69 (RxBw=83, AfcBw=100)
+	49233: {51660, 0, 0x52, 0x4A},  // JeeLabs driver for rfm69 (RxBw=83, AfcBw=100)
+	50000: {90000, 0, 0x42, 0x42},  // nice round number
+}
+
 // RxPacket is a received packet with stats.
 type RxPacket struct {
 	Payload []byte    // payload, from address to last data byte, excluding length & crc
@@ -270,11 +282,44 @@ func (r *Radio) SetFrequency(freq uint32) {
 	r.setMode(mode)
 }
 
-// set the bit rate directly (if this works, will replace the function below
-// and its associated lookup table)
+// SetRate sets the bit rate according to the Rates table. The rate requested must use one of
+// the values from the Rates table. If it is not, nothing is changed.
 func (r *Radio) SetRate(rate uint32) {
-	rateVal := 32000000 / rate
+	params, found := Rates[rate]
+	if !found {
+		return
+	}
+	bw := func(v byte) int {
+		return 32000000 / (int(16+(v&0x18>>1)) * (1 << ((v & 0x7) + 2)))
+	}
+	r.log("SetRate %dbps, Fdev:%dHz, RxBw:%dHz(%#x), AfcBw:%dHz(%#x) AFC off:%dHz", rate,
+		params.Fdev, bw(params.RxBw), params.RxBw, bw(params.AfcBw), params.AfcBw,
+		(params.Fdev/10/488)*488)
+
+	r.Lock()
+	defer r.Unlock()
+
+	r.rate = rate
+	mode := r.mode
+	r.setMode(MODE_STANDBY)
+	// program bit rate, assume a 32Mhz osc
+	var rateVal uint32 = (32000000 + rate/2) / rate
 	r.writeReg(REG_BITRATEMSB, byte(rateVal>>8), byte(rateVal&0xff))
+	// program frequency deviation
+	var fStep float64 = 32000000.0 / 524288 // 32Mhz osc / 2^19 = 61.03515625 Hz
+	fdevVal := uint32((float64(params.Fdev) + fStep/2) / fStep)
+	r.writeReg(REG_FDEVMSB, byte(fdevVal>>8), byte(fdevVal&0xFF))
+	// program data modulation register
+	r.writeReg(REG_DATAMODUL, params.Shaping&0x3)
+	// program RX bandwidth and AFC bandwidth
+	r.writeReg(REG_RXBW, params.RxBw, params.AfcBw)
+	// program AFC offset to be 10% of Fdev
+	r.writeReg(REG_TESTAFC, byte(params.Fdev/10/488))
+	if r.readReg(REG_AFCCTRL) != 0x00 {
+		r.setMode(MODE_FS)            // required to write REG_AFCCTRL, undocumented
+		r.writeReg(REG_AFCCTRL, 0x00) // 0->AFC, 20->AFC w/low-beta offset
+	}
+	r.setMode(mode)
 }
 
 // SetPower configures the radio for the specified output power (TODO: should be in dBm).
