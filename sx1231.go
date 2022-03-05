@@ -432,12 +432,6 @@ func (r *Radio) Receive(timeout time.Duration) (*RxPacket, error) {
 	// Bail out if we're not actually receiving a packet. This happens when the
 	// receiver restarts because RSSI went away or no SYNC was found before timeout.
 	irq1 := r.readReg(REG_IRQFLAGS1)
-	//if irq1&(IRQ1_RXREADY|IRQ1_RSSI) != IRQ1_RXREADY|IRQ1_RSSI {
-	//	//r.log("... not receiving? IRQ=%t mode=%#02x irq1=%#02x irq2=%02x",
-	//	//	r.intrPin.Read(), r.readReg(REG_OPMODE), irq1, irq2)
-	//	r.log("SimpleReceive: unexpectedly reported no rxready or no rssi, returning nil")
-	//	return nil, nil
-	//}
 	// As soon as we have sync match, grab RSSI and FEI.
 	if rssi == 0 && irq1&IRQ1_SYNCMATCH != 0 {
 		// Get RSSI.
@@ -486,13 +480,18 @@ func (r *Radio) Transmit(payload []byte) error {
 	buf[0] = byte(len(payload))
 	copy(buf[1:], payload)
 	r.writeReg(REG_FIFO|0x80, buf...)
+	r.log("Transmit(): message loaded")
+	r.logRegs()
 	r.setMode(MODE_TRANSMIT)
 	//changing this to a blocking send - wait here until the hardware reports that the send is complete
 	//TODO: put some kind of a timeout on this block
+	r.log("Transmit(): transmit mode set, waitng for transmit complete")
 	for {
 		if irq2 := r.readReg(REG_IRQFLAGS2); irq2&IRQ2_PACKETSENT == 0 {
+			r.log("Transmit(): done!")
 			break
 		}
+		r.log("Transmit(): not yet...")
 		time.Sleep(5 * time.Millisecond)
 	}
 	return nil
